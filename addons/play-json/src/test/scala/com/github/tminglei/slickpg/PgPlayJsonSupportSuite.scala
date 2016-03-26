@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 
 import org.scalatest.FunSuite
 import play.api.libs.json._
-import slick.jdbc.GetResult
+import slick.jdbc.{GetResult, JdbcType}
 
 import scala.concurrent.{ExecutionContext, Await}
 import scala.concurrent.duration._
@@ -33,6 +33,17 @@ class PgPlayJsonSupportSuite extends FunSuite {
           (s) => utils.SimpleArrayUtils.fromString[JsValue](Json.parse(_))(s).orNull,
           (v) => utils.SimpleArrayUtils.mkString[JsValue](_.toString())(v)
         ).to(_.toList)
+
+      implicit def jbeanCaseClassColumnExtensionMethods(c: Rep[JBean])(
+        implicit tm: JdbcType[JsValue]) : JsonColumnExtensionMethods[JBean, JBean] = {
+        new JsonColumnExtensionMethods[JBean, JBean](c)
+      }
+
+      implicit def jbeanCaseClassOptionColumnExtensionMethods(c: Rep[Option[JBean]])(
+        implicit tm: JdbcType[JsValue]) = {
+        new JsonColumnExtensionMethods[JBean, Option[JBean]](c)
+      }
+
     }
 
     val plainAPI = new API with PlayJsonPlainImplicits
@@ -93,6 +104,9 @@ class PgPlayJsonSupportSuite extends FunSuite {
           ),
           JsonTests.filter(_.id === testRec2.id).map(_.json.~>>(1)).result.head.map(
             r => assert("""{"a":"v5","b":3}""" === r.replace(" ", ""))
+          ),
+          JsonTests.filter(_.jbean.+>>("name") === "tt").map(_.jbean).result.head.map(
+            r => assert(JBean("tt", 3) === r)
           ),
           // #>>/#>
           JsonTests.filter(_.id === testRec1.id).map(_.json.#>(List("c"))).result.head.map(
